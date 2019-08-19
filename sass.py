@@ -96,9 +96,6 @@ def initialize(pelicanobj):
     # Ensure SOURCES_PATH and TARGET_DIR are folders
     if not os.path.isdir(SOURCES_PATH):
         raise ValueError("pelican-sass: SOURCES_PATH is not a valid folder.")
-    
-    if not os.path.isdir(TARGET_PATH):
-        raise ValueError("pelican-sass: TARGET_PATH is not a valid folder")
 
     for filename in os.listdir(SOURCES_PATH):
         if filename.endswith(".sass") or filename.endswith(".scss"):
