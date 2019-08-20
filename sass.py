@@ -6,49 +6,50 @@ files during every regeneration.
 """
 import os, io
 import json
-import logging
 from pelican import signals
 import sass
 
 def write_content(content, destination):
-        """
-        Write given content to destination path.
-        It will create needed directory structure first if it contain some
-        directories that does not allready exists.
-        Args:
-            content (str): Content to write to target file.
-            destination (str): Destination path for target file.
-        Returns:
-            str: Path where target file has been written.
-        """
-        try:
-            directory = os.path.dirname(destination)
+		"""
+		Function partial credit: Boussole https://github.com/sveetch/boussole
+		Write given content to destination path.
+		It will create needed directory structure first if it contain some
+		directories that does not already exists.
+		Args:
+		    content (str): Content to write to target file.
+		    destination (str): Destination path for target file.
+		Returns:
+		    str: Path where target file has been written.
+		"""
+		CGREEN  = '\33[32m'
+		CEND = '\033[0m'
 
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory)
+		try:
 
-            with io.open(destination, 'w', encoding='utf-8') as f:
-                f.write(content)
+			directory = os.path.dirname(destination)
 
-        except Exception as e:
-            print(e)
-        
-        CGREEN  = '\33[32m'
-        CEND = '\033[0m'
-        print(CGREEN + "pelican-sass: Generating output: %s" % destination + CEND)
+			if directory and not os.path.exists(directory):
+				os.makedirs(directory)					
 
-def sass_compile(file, destination, output_style, source_comments):
+			if not compare_content(content, destination):
+				with io.open(destination, 'w', encoding='utf-8') as f:
+					f.write(content)
+					print(CGREEN + "pelican-sass: Generating output: %s" % os.path.basename(destination) + CEND)
+			else:
+				print(CGREEN + "pelican-sass: Skipping generation (no changes): %s" % os.path.basename(destination) + CEND)
+
+		except Exception as e:
+			print(e)
+
+def sass_compile(file, destination, output_style, source_comments, library_paths, source_map_destination):
     
     try:
         content = sass.compile(
                 filename=file,
                 output_style=output_style,
                 source_comments=source_comments,
-                # include_paths=settings.LIBRARY_PATHS,
-                # Sourcemap is allways in the same directory than compiled
-                # CSS file
-                #output_filename_hint='',
-                #source_map_filename=source_map_destination,
+                include_paths=library_paths,
+                source_map_filename=source_map_destination,
             )
 
     except Exception as e:
@@ -75,10 +76,50 @@ def _load_settings(file):
         settings['OUTPUT_STYLES'] = 'nested'
     if 'SOURCE_COMMENTS' not in settings:
         print("pelican-sass: SOURCE_COMMENTS key missing in settings.json, defaulting to false")
-        settings['SOURCE_COMMENTS'] = False        
+        settings['SOURCE_COMMENTS'] = False
+    if 'LIBRARY_PATHS' not in settings:
+    	settings['LIBRARY_PATHS'] = []
+    if 'SOURCE_MAP_DESTINATION' not in settings:
+    	settings['SOURCE_MAP_DESTINATION'] = None
+    	
+    	
 
+def compare_content(content, destination):
+	"""
+	Helper Function:
+	Compares content with potential destination
+	Used by write_content() to determine if new file should be
+	written. 
 
-def initialize(pelicanobj):
+	Required (workaround) for auto-generating loop in Pelican.
+	
+	Args:
+	    content (str): Content to write to target file.
+	    destination (str): Destination path for target file.
+
+	returns:
+		True: if content and destination are the same
+		False: if content and destination differ.
+
+	"""
+	# Check if file exists
+	if os.path.exists(destination):
+		with open(destination) as f:
+			# Store original file's content
+			original = f.read()
+			
+			# Check if original content eq. new content
+			if (original == content):
+				# Content is the same, return True
+				return True
+			else:
+				# Content is different, return False
+				return False
+	else:
+		# File does not exist, return False
+		return False
+
+def initialize(pelicanobj, pelican_output_path):
     """Add libsass compilation to Pelican."""
 
     # Load 'settings.json' from the root theme folder
@@ -103,10 +144,12 @@ def initialize(pelicanobj):
                 "%s/%s" % (SOURCES_PATH, filename), 
                 TARGET_PATH,
                 settings['OUTPUT_STYLES'], 
-                settings['SOURCE_COMMENTS']
+                settings['SOURCE_COMMENTS'],
+                settings['LIBRARY_PATHS'],
+                settings['SOURCE_MAP_DESTINATION']
                 )
 
 def register():
     """Plugin registration."""
     print("Registering Pelican Libsass plugin by Jean-Ray Arseneau (https://theint.net/)")
-    signals.static_generator_init.connect(initialize)
+    signals.finalized.connect(initialize)
